@@ -1,4 +1,4 @@
-# replicacao_postgres
+# Configurando Replicação em PostgreSQL com Docker Compose
 Neste guia, vamos configurar um ambiente de replicação do PostgreSQL utilizando Docker Compose, garantindo que a réplica se mantenha sincronizada com o banco de dados principal.
 
 📌 Tópicos que serão abordados:
@@ -17,10 +17,7 @@ Neste guia, vamos configurar um ambiente de replicação do PostgreSQL utilizand
 
 ---
 
-📌 1. Introdução à Replicação no PostgreSQL – O que é replicação e seus benefícios
-
-image.png
-
+# 📌 1. Introdução à Replicação no PostgreSQL – O que é replicação e seus benefícios
 
 
 A replicação no PostgreSQL é o processo de manter cópias sincronizadas do banco de dados em múltiplos servidores. Isso garante alta disponibilidade, melhor desempenho e recuperação rápida em caso de falhas.
@@ -35,12 +32,13 @@ A replicação no PostgreSQL é o processo de manter cópias sincronizadas do ba
 
 ---
 
-📌 2. Configurar e Subir o Banco de Dados Principal (main)
+# 📌 2. Configurar e Subir o Banco de Dados Principal (main)
 
 🔹 2.1 Criar o arquivo docker-compose.yml
 
 Crie um diretório para o projeto e dentro dele, um arquivo docker-compose.yml com o seguinte conteúdo:
 
+```
 services:
   main:
     image: postgres:14
@@ -69,6 +67,7 @@ services:
         target: /dev/shm
     depends_on:
       - main
+```
 
 
 💡 Explicação:
@@ -82,21 +81,21 @@ services:
 🔹 1.2 Subir o main
 
 Agora, suba apenas o banco principal:
-
+```
 docker-compose up -d main
-
+```
 Aguarde alguns segundos para o PostgreSQL iniciar.
 
 ---
 
-📌 3. Configurar postgresql.conf e pg_hba.conf no main
+# 📌 3. Configurar postgresql.conf e pg_hba.conf no main
 
 Agora, precisamos ajustar a configuração para permitir conexões da réplica.
 
-🔹 3.1 Ajustar postgresql.conf sudo chmod -R 755 ./master
+🔹 3.1 Ajustar postgresql.conf ```sudo chmod -R 755 ./master```
 
 Acessar pasta master arquivo postgresql.conf  e altere os seguintes parametros:
-
+```
 # WRITE-AHEAD LOG
 wal_level = logical
 wal_compression = on 
@@ -110,7 +109,7 @@ primary_conninfo = 'host=main port=5432 user=userbackup password=123456'
 primary_slot_name = 'slot_replicacao_master'   
 hot_standby = on 
 hot_standby_feedback = true 
-
+```
 💡 Explicação:
 
 * wal_level = logical → Habilita replicação lógica.
@@ -127,16 +126,16 @@ hot_standby_feedback = true
 🔹 3.2 Ajustar pg_hba.conf
 
 Acessar pasta master arquivo pg_hba.conf sudo chmod -R 755 ./master  e adicionar os seguintes parametros:
-
+```
 # TYPE  DATABASE        USER            ADDRESS                 METHOD
 host    replication     userbackup      0.0.0.0/0               scram-sha-256
-
+```
 ---
 
 🔹 3.3 Criar usuário de replicação
 
 Acessar dbeaver ou qualquer SGBD e criar o usuario:
-
+```
 CREATE ROLE userbackup WITH 
     SUPERUSER
     CREATEDB
@@ -147,51 +146,51 @@ CREATE ROLE userbackup WITH
     BYPASSRLS
     CONNECTION LIMIT -1
     PASSWORD '123456';
-
+```
 ---
 
 🔹 3.4 Criação do Slot de replicação
-
+```
 SELECT * FROM pg_create_physical_replication_slot('slot_replicacao_master');
-
+```
 🔹 3.5 Reiniciar o main
 
 Saia do contêiner (exit) e reinicie o banco:
-
+```
 docker restart postgres-main
-
+```
 
 ---
 
-📌 4. Subir a Réplica
+# 📌 4. Subir a Réplica
 
 Agora, subimos a réplica no Compose:
-
+```
 docker-compose up -d replica_1
-
+```
 Verifique se os contêineres estão rodando:
-
+```
 docker ps
 
 sudo chmod -R 755 ./replication
-
+```
 A réplica ainda não está sincronizada, então precisamos fazer o pg_basebackup.
 
 ---
 
-📌 5. Criar Backup e Iniciar a Réplica
+# 📌 5. Criar Backup e Iniciar a Réplica
 
 Agora, entre no contêiner da réplica:
-
+```
 docker exec -it postgres-replica bash
 
-
+```
 🔹 5.1 Executar pg_basebackup
 
 Dentro do contêiner da réplica, execute:
-
+```
 pg_basebackup -h main -U userbackup -D /var/lib/postgresql/data -v -P -X stream -c fast
-
+```
 
 💡 Explicação:
 
@@ -208,9 +207,9 @@ pg_basebackup -h main -U userbackup -D /var/lib/postgresql/data -v -P -X stream 
 🔹 5.2 Alterar diretório PGDATA replicação 
 
 Esse arquivo indica que a instância é uma réplica:
-
+```
 PGDATA=/var/lib/postgresql/data
-
+```
 ---
 
 
@@ -220,28 +219,28 @@ PGDATA=/var/lib/postgresql/data
 🔹 5.3 Criar o Arquivo standby.signal
 
 Esse arquivo indica que a instância é uma réplica:
+```
+touch replication/standby.signal
 
-touch /var/lib/postgresql/data/standby.signal
-
-
+```
 ---
 
 🔹 5.4 Reiniciar a réplica
 
 Saia do contêiner (exit) e reinicie a réplica:
-
+```
 docker restart postgres-replica
-
+```
 ---
 
-📌 6. Verificar se a Replicação Está Funcionando
+# 📌 6. Verificar se a Replicação Está Funcionando
 
 🔹 6.1 Testar a Conexão na Réplica
 
 Acesse a réplica e veja se está rodando em standby mode:
-
+```
 docker exec -it postgres-replica psql -U postgres -c "SELECT pg_is_in_recovery();"
-
+```
 Se o resultado for t (true), significa que a réplica está sincronizando corretamente!
 
 ---
@@ -249,14 +248,14 @@ Se o resultado for t (true), significa que a réplica está sincronizando corret
 🔹 6.2 Testar a Replicação
 
 Para testar se os dados estão sendo replicados, crie uma tabela no main:
-
+```
 docker exec -it postgres-main psql -U postgres -c "CREATE TABLE teste (id SERIAL PRIMARY KEY, nome TEXT);"
-
+```
 
 Agora, verifique se a tabela apareceu na réplica:
-
+```
 docker exec -it postgres-replica psql -U postgres -c "\dt"
-
+```
 Se a tabela teste aparecer na réplica, significa que a replicação está funcionando corretamente! 🎉
 
 ---
